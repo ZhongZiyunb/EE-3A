@@ -1,0 +1,11 @@
+--cpu=Cortex-M4.fp
+".\objects\dac_demo.o"
+".\objects\dac6571.o"
+".\objects\tm1638.o"
+".\driverlib\rvmdk\driverlib.lib"
+".\objects\startup_tm4c129.o"
+".\objects\system_tm4c129.o"
+--strict --scatter ".\Objects\DAC_demo.sct"
+--summary_stderr --info summarysizes --map --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list ".\Listings\DAC_demo.map" -o .\Objects\DAC_demo.axf
