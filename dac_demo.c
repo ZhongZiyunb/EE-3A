@@ -497,6 +497,9 @@ void ShiftAvarage(void)
 			//target_i = 400;
 			target_i = (mean_i + mean_i_c) / 2;
 			//target_i = mean_i_c;
+			if (mean_i_c > 900) target_i = target_i * 1.019;
+			if ( 450 < mean_i_c && mean_i_c < 550) target_i = target_i * 0.99;
+			if ( 650 < mean_i_c && mean_i_c < 750) target_i = target_i * 1.012;
 }
 //*****************************************************************************
 //
