@@ -28,11 +28,11 @@ Project File Date:  11/14/2021
 *** Using Compiler 'V5.06 update 4 (build 422)', folder: 'E:\Program Files (x86)\Keil_v5\ARM\ARMCC\Bin'
 Build target 'Target 1'
 compiling dac_demo.c...
-dac_demo.c(482): warning:  #177-D: variable "pui32ADC0Value"  was declared but never referenced
-      uint32_t pui32ADC0Value[2];
+dac_demo.c(343): warning:  #68-D: integer conversion resulted in a change of sign
+  				if (mean_i - mean_i_c < 10 && mean_i - mean_i_c > -10) {
 dac_demo.c: 1 warning, 0 errors
 linking...
-Program Size: Code=8012 RO-data=1140 RW-data=112 ZI-data=848  
+Program Size: Code=8492 RO-data=1140 RW-data=148 ZI-data=972  
 FromELF: creating hex file...
 ".\Objects\DAC_demo.axf" - 0 Error(s), 1 Warning(s).
 
@@ -51,9 +51,9 @@ Package Vendor: Keil
 <h2>Collection of Component Files used:</h2>
 
    * Component: Keil::Device:Startup:1.0.0
-      Source file:   Device\Source\ARM\startup_TM4C129.s
-      Include file:  Device\Include\TM4C129\TM4C129.h
       Source file:   Device\Source\system_TM4C129.c
+      Include file:  Device\Include\TM4C129\TM4C129.h
+      Source file:   Device\Source\ARM\startup_TM4C129.s
 Build Time Elapsed:  00:00:00
 </pre>
 </body>

@@ -48,6 +48,7 @@
 #define V_T100ms	5              // 0.1sÈí¼þ¶¨Ê±Æ÷Òç³öÖµ£¬5¸ö20ms
 #define V_T500ms	25             // 0.5sÈí¼þ¶¨Ê±Æ÷Òç³öÖµ£¬25¸ö20ms
 #define V_T240ms 12 
+#define V_T400ms 120 // 1.6s
 #define DAC_set_current_max 1001
 #define current_display_error 5
 //*****************************************************************************
@@ -60,7 +61,9 @@ void SysTickInit(void);     // ÉèÖÃSysTickÖÐ¶Ï
 void DevicesInit(void);     // MCUÆ÷¼þ³õÊ¼»¯£¬×¢£º»áµ÷ÓÃÉÏÊöº¯Êý
 void ADCInit(void);			// ADC³õÊ¼»¯
 void ADC_Sample(void);  // ADC²ÉÑù
+void ADC_Sample_1(void);  // ADC
 void StateMachine(void); // ×´Ì¬»ú
+void ShiftAvarage(void); // »¬¶¯Æ½¾ù
 //*****************************************************************************
 //
 // ±äÁ¿¶¨Òå
@@ -72,12 +75,14 @@ uint8_t clock100ms = 0;
 uint8_t clock500ms = 0;
 uint8_t clock40ms = 0;
 uint8_t clock250ms = 0;
+uint8_t clock400ms = 0;
 
 // Èí¼þ¶¨Ê±Æ÷Òç³ö±êÖ¾
 uint8_t clock100ms_flag = 0;
 uint8_t clock500ms_flag = 0;
 uint8_t clock40ms_flag = 0;
 uint8_t clock250ms_flag = 0;
+uint8_t clock400ms_flag = 0;
 
 // ²âÊÔÓÃ¼ÆÊýÆ÷
 uint32_t test_counter = 0;
@@ -111,20 +116,25 @@ uint32_t ui32SysClock;
 
 // AIN2(PE1)  ADC???[0-4095]
 uint32_t ui32ADC0Value[2]; 
+uint32_t ui32ADC1Value[1]; 
 
 //??30???????
 uint32_t data_u[30];
 uint32_t data_i[30];
+uint32_t data_i_c[30];
 
 //?????????????
 //?30?????
 uint8_t flag_u=0; 
 uint8_t flag_i=0;
+uint8_t flag_i_c =0;
 
 uint32_t sum_u=0;
 uint32_t sum_i=0;
+uint32_t sum_i_c=0;
 uint32_t mean_u=0;
 uint32_t mean_i=0;
+uint32_t mean_i_c=0;
 
 // AIN2???(???0.01V) [0.00-3.30]
 uint32_t ui32ADC0Voltage; 
@@ -144,6 +154,15 @@ int error = 0;
 uint32_t DAC_RANGE_VALID_MAX = 0;
 uint32_t DAC_RANGE_VALID_MIN = 0;
 uint8_t valid_flag  = 0 ;
+uint32_t fix_thresh = 20;
+uint8_t fix_flag = 0;
+uint32_t fix_code = 0;
+
+// ¾ùÁ÷
+uint32_t target_i=0;
+uint32_t last_target_i=0;
+
+
 //*****************************************************************************
 //
 // Ö÷³ÌÐò
@@ -169,18 +188,25 @@ uint8_t valid_flag  = 0 ;
 			// DAC6571_code = 120;
 			// DAC Óë code µÄ¹ØÏµ »¹ÒªÔÙÐÞÕýÒ»ÏÂ
 			//DAC6571_code = (DAC_set_current - 3.78) * 128. / 276.0;
-			// ÊýÂë¹ÜÏÔÊ¾	
+			// ÊýÂë¹ÜÏÔÊ
+			
 			if (display_toggle_flag == 1)
 			{
-				pnt = 0x11;
+				
 				digit[4] = mean_u/ 1000; 	     // ??ADC??????
 				digit[5] = mean_u / 100 % 10; 	 // ??ADC??????
 				digit[6] = mean_u / 10 % 10; 	 // ??ADC??????
 				digit[7] = mean_u % 10;           // ??ADC??????
+				digit[0] = mean_i / 1000. ; 	  // ¼ÆËãÇ§Î»Êý
+				digit[1] = mean_i / 100 % 10;   // ¼ÆËã°ÙÎ»Êý
+				digit[2] = mean_i / 10 % 10;    // ¼ÆËãÊ®Î»Êý
+				digit[3] = mean_i % 10;         // ¼ÆËã¸öÎ»Êý
+
 			}
+			/*
 			if (display_toggle_flag == 2)
 			{	
-				pnt = 0x11;
+				pnt = 0x11
 				digit[4] = mean_i / 1000; 	     // ??ADC??????
 				digit[5] = mean_i / 100 % 10; 	 // ??ADC??????
 				digit[6] = mean_i / 10 % 10; 	 // ??ADC??????
@@ -193,13 +219,20 @@ uint8_t valid_flag  = 0 ;
 				digit[5] = DAC6571_code / 100 % 10;   // ¼ÆËã°ÙÎ»Êý
 				digit[6] = DAC6571_code / 10 % 10;    // ¼ÆËãÊ®Î»Êý
 				digit[7] = DAC6571_code % 10;         // ¼ÆËã¸öÎ»Êý
-      } 
-			// ÏÔÊ¾DACÐ¾Æ¬Éè¶¨µÄµçÑ¹
-			digit[0] = DAC_set_current / 1000. ; 	  // ¼ÆËãÇ§Î»Êý
-			digit[1] = DAC_set_current / 100 % 10;   // ¼ÆËã°ÙÎ»Êý
-			digit[2] = DAC_set_current / 10 % 10;    // ¼ÆËãÊ®Î»Êý
-			digit[3] = DAC_set_current % 10;         // ¼ÆËã¸öÎ»Êý
-			
+      }
+			*/
+			// ÏÔÊ¾DACÐ¾Æ¬Éè¶¨µÄµçÑ
+			if (display_toggle_flag == 2){
+			digit[4] = mean_i / 1000 ; 	  // ¼ÆËãÇ§Î»Êý
+			digit[5] = mean_i / 100 % 10;   // ¼ÆËã°ÙÎ»Êý
+			digit[6] = mean_i / 10 % 10;    // ¼ÆËãÊ®Î»Êý
+			digit[7] = mean_i % 10;         // ¼ÆËã¸öÎ»Êý
+				
+			digit[0] = mean_i_c / 1000. ; 	  // ¼ÆËãÇ§Î»Êý
+			digit[1] = mean_i_c / 100 % 10;   // ¼ÆËã°ÙÎ»Êý
+			digit[2] = mean_i_c / 10 % 10;    // ¼ÆËãÊ®Î»Êý
+			digit[3] = mean_i_c % 10;         // ¼ÆËã¸öÎ»Êý
+			}
 			DAC6571_Fastmode_Operation(DAC6571_code); //DAC×ª»»ºóÊä³ö
 		}
 		
@@ -217,7 +250,8 @@ uint8_t valid_flag  = 0 ;
 		if (clock40ms_flag == 1)        // ??40ms??????  ?80ms
     {
       clock40ms_flag = 0;
-            
+			ShiftAvarage(); // ½øÐÐ»¬¶¯Æ½¾ù
+      /*      
 			sum_u-=data_u[flag_u];
 			sum_i-=data_i[flag_i];
 			ADC_Sample();
@@ -234,8 +268,8 @@ uint8_t valid_flag  = 0 ;
 			mean_u=sum_u/30;
 			mean_i=sum_i/30;
 					
-						/*mean_u=sum_u/27;
-						mean_i=sum_i/56;*/
+						//mean_u=sum_u/27;
+						//mean_i=sum_i/56;
 					
 			mean_u/=1.2432;
 			mean_i/=1.2340;
@@ -243,7 +277,7 @@ uint8_t valid_flag  = 0 ;
 			mean_u*=2;
 			mean_i/=15;
 			mean_i/=0.1017;
-						
+						*/
     }
 		
 		//Last_DAC_set_current = DAC_set_current; //¼ÇÂ¼ÏÂÉÏÒ»´ÎÉè¶¨µÄµçÁ÷
@@ -262,13 +296,61 @@ uint8_t valid_flag  = 0 ;
 //*****************************************************************************
 void StateMachine(void) {
 	switch(status) {
-		case 1: // ×´Ì¬Ò»
-			DAC6571_code = (DAC_set_current - 3.78) * 128. / 276.0 ;
-			Last_DAC_set_current = DAC_set_current;
-		  status = 2;
-		  clock250ms = 0;
-			clock250ms_flag = 0;
+	/*	case 1: 
+			// ¶Ô mean_i ½øÐÐÎÈ¶¨´¦Àí
+			
+			DAC6571_code = (target_i - 3.78) * 128. / 276.0 ;
+			error = target_i - mean_i; // µçÑ¹²î
+			if (error > 100) {
+				
+			}
+		case 2: // ×´Ì¬¶þ½øÐÐµÈ´ý
+			if (clock250ms_flag) {
+				clock250ms_flag = 0;
+				status = 3;
+			} else {
+				status = 2;
+			}
 			break;
+	*/	
+		
+		case 1: // ×´Ì¬Ò»
+			/*if (fix_flag) {
+				DAC6571_code = DAC6571_code;
+				if (mean_i - target_i > -fix_thresh && mean_i - target_i < fix_thresh){
+					status = 1;
+					break;
+				} else {
+					fix_flag = 0;
+				}
+			}
+			else if (mean_i - target_i > -5 && mean_i - target_i < 5) {
+				fix_flag = 1;
+				status = 1;
+				break;
+			}
+			
+			if (!fix_flag) {
+				DAC6571_code = (target_i - 3.78) * 128. / 276.0 ;
+				status = 2;
+				clock250ms = 0;
+				clock250ms_flag = 0;
+				break;
+			} 
+			*/
+			  //DAC6571_code = (target_i*0.932 - 3.78) * 128. / 276.0 ;
+			  last_target_i = target_i;
+				if (mean_i - mean_i_c < 10 && mean_i - mean_i_c > -10) {
+					status = 1;
+					break;
+				} 
+				else {
+					DAC6571_code = (target_i*0.932 - 3.78) * 128. / 276.0 ;
+				}
+				status = 2;
+				clock250ms = 0;
+				clock250ms_flag = 0;
+				break;
 		case 2: // ×´Ì¬¶þ ÀûÓÃsystick½øÐÐÑÓÊ± 
 			if (clock250ms_flag) {
 				clock250ms_flag = 0;
@@ -278,12 +360,20 @@ void StateMachine(void) {
 			}
 			break;
 		case 3: // ×´Ì¬Èý 
+			if (clock400ms_flag) {
+				clock400ms_flag = 0;
+				status = 3;
+				break;
+			}
+			
 			// TODO:Õâ±ßÐèÒªÌí¼ÓÒ»¸öÃÅÏÞ¡£·ÀÖ¹¶¶¶¯
-			if (Last_DAC_set_current == DAC_set_current) {
-				if (mean_i > DAC_set_current && mean_u < 5200){
-					error = mean_i - DAC_set_current;
+			if (last_target_i != target_i) { //TODO: Ìí¼ÓÒ»¸öÃÅÏÞ
+				if (mean_i > target_i+3 && mean_u < 5200){
+					error = mean_i - target_i;
 					
-					if (error < 10) {
+					if (mean_i - mean_i_c < 10) {
+							fix_code = DAC6571_code;
+							fix_flag = 1;
 							DAC_RANGE_VALID_MAX = DAC6571_code; 
 							if (DAC_RANGE_VALID_MAX - DAC_RANGE_VALID_MIN > 0 
 								&& DAC_RANGE_VALID_MAX - DAC_RANGE_VALID_MIN < 10)
@@ -291,51 +381,63 @@ void StateMachine(void) {
 					}
 					
 					if (valid_flag) {
-						DAC6571_code = (DAC_RANGE_VALID_MAX+DAC_RANGE_VALID_MIN) / 2 + 1;
+						//if(fix_flag)
+						//	DAC6571_code = (DAC_RANGE_VALID_MAX+DAC_RANGE_VALID_MIN) / 2 + 1;
+						//else 
+						//	DAC6571_code = fix_code;
 					} else {
 						if (error > 20)
-							DAC6571_code -= 5;
+							DAC6571_code -= 1;
 						else
 							DAC6571_code -= 1;
 					}
-					if (DAC6571_code <= 80 && DAC6571_code >= 72 ) DAC6571_code = 75; // Ç¿ÐÐÐÞÕý
-					if (DAC6571_code <= 125 && DAC6571_code >= 118 ) DAC6571_code = 120;
+					//if (DAC6571_code <= 80 && DAC6571_code >= 72 ) DAC6571_code = 75; // Ç¿ÐÐÐÞÕý
+					//if (DAC6571_code <= 125 && DAC6571_code >= 118 ) DAC6571_code = 120;
 					clock250ms = 0;
 					clock250ms_flag = 0;
 					status = 2;
-				} else if (mean_i < DAC_set_current  && mean_u < 5200){
-					error = DAC_set_current - mean_i;
+				} else if (mean_i < target_i-3 && mean_u < 5200){
+					error = target_i - mean_i;
 					
-					if (error < 10) {
+					if (mean_i_c - mean_i < 10) {
+							fix_code = DAC6571_code;
+							fix_flag = 1;
 							DAC_RANGE_VALID_MIN = DAC6571_code;
 							if (DAC_RANGE_VALID_MAX - DAC_RANGE_VALID_MIN > 0 
 								&& DAC_RANGE_VALID_MAX - DAC_RANGE_VALID_MIN < 10)
 								valid_flag = 1; 						
+					} else {
+						fix_flag = 0;
 					}
+					
+					
 					if (valid_flag) {
-						DAC6571_code = (DAC_RANGE_VALID_MAX+DAC_RANGE_VALID_MIN) / 2 + 1;
+						//if (fix_flag)
+						//	DAC6571_code = (DAC_RANGE_VALID_MAX+DAC_RANGE_VALID_MIN) / 2 + 1;
+						//else 
+						//	DAC6571_code = fix_code;
 					} else {
 						if (error > 20)
 							DAC6571_code += 5;
 						else
 							DAC6571_code += 1;
 					}
-					if (DAC6571_code <= 80 && DAC6571_code >= 72 ) DAC6571_code = 75;
-					if (DAC6571_code <= 125 && DAC6571_code >= 118 ) DAC6571_code = 120;
+					//if (DAC6571_code <= 80 && DAC6571_code >= 72 ) DAC6571_code = 75; // Ç¿ÐÐÐÞÕý
+					//if (DAC6571_code <= 125 && DAC6571_code >= 118 ) DAC6571_code = 120; // Ç¿ÐÐÐÞÕý
 					clock250ms = 0;
 					clock250ms_flag = 0;
 					status = 2;
-				} else if (mean_i < DAC_set_current && mean_u > 5200) {
+				} else if (mean_i < target_i && mean_u > 5200) {
 					status = 4;
 				}
 			} else{
 				status = 1;
 			}
-			if (Last_DAC_set_current != DAC_set_current) status = 1;
-			Last_DAC_set_current = DAC_set_current;
+			if (target_i != last_target_i) status = 1;
+			last_target_i = target_i;
 			break;
 		case 4: // ×´Ì¬ËÄ ÏÞÑ¹±£»¤×´Ì¬
-			if (DAC_set_current > mean_i && mean_u > 5200){
+			if (target_i > mean_i && mean_u > 5200){
 				status = 4;
 			} else {
 				status = 3;
@@ -344,8 +446,58 @@ void StateMachine(void) {
 		}
 		valid_flag = 0;
 }
-
-
+//*****************************************************************************
+//
+// º¯ÊýÔ­ÐÍ£ºvoid ShiftAvarage(void)
+// º¯Êý¹¦ÄÜ£º»¬¶¯Æ½¾ù£¬ÇóÈ¡ADCµÄÁ¿
+// º¯Êý²ÎÊý£ºÎÞ
+// º¯Êý·µ»ØÖµ£ºÎÞ
+//
+//*****************************************************************************
+void ShiftAvarage(void)
+{
+			sum_u-=data_u[flag_u];
+			sum_i-=data_i[flag_i];
+			sum_i_c-=data_i_c[flag_i_c];
+			
+			ADC_Sample();
+			ADC_Sample_1();
+					
+			data_u[flag_u]=ui32ADC0Value[0];
+			sum_u+=data_u[flag_u];
+			flag_u=(flag_u+1)%30;
+					
+			data_i[flag_i]=ui32ADC0Value[1];
+			sum_i+=data_i[flag_i];
+			flag_i=(flag_i+1)%30;
+						
+			data_i_c[flag_i_c]=ui32ADC1Value[0];
+			sum_i_c+=data_i_c[flag_i_c];
+			flag_i_c=(flag_i_c+1)%30;
+						
+			mean_u=sum_u/30;
+			mean_i=sum_i/30;
+			mean_i_c=sum_i_c/30;
+					
+			mean_u/=1.2432;
+			mean_i/=1.2340;
+			mean_i_c/=1.2340;
+			
+			mean_u*=2;
+			mean_i/=15;
+			mean_i/=0.1017;
+			mean_i_c/=15;
+			mean_i_c/=0.1017;
+			
+			// ¶þ´Î±ê¶¨
+			mean_i *= 1.013;
+			mean_i_c *= 1.0255;
+			
+			
+			//target_i = 400;
+			target_i = (mean_i + mean_i_c) / 2;
+			//target_i = mean_i_c;
+}
 //*****************************************************************************
 //
 // º¯ÊýÔ­ÐÍ£ºvoid GPIOInit(void)
@@ -412,7 +564,7 @@ void DevicesInit(void)
 	GPIOInit();             // GPIO³õÊ¼»¯
 	ADCInit();
 	SysTickInit();          // ÉèÖÃSysTickÖÐ¶Ï
-    IntMasterEnable();			// ×ÜÖÐ¶ÏÔÊÐí
+  IntMasterEnable();			// ×ÜÖÐ¶ÏÔÊÐí
 }
 
 //*****************************************************************************
@@ -425,23 +577,23 @@ void DevicesInit(void)
 //*****************************************************************************
 void ADCInit(void)
 {	   
-    // ??ADC0??
+    // ADC0 ADC1
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-
-    // Ê¹ÓÃAIN2/PE1 AIN1/PE2×÷ÎªADCÊäÈë,Ê¹ÄÜE1 E2
+		SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    
+	  // Ê¹ÓÃAIN2/PE1 AIN1/PE2×÷ÎªADCÊäÈë,Ê¹ÄÜE1 E2 E3¶Ë¿Ú
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
 
-    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_1|GPIO_PIN_2);
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3); // 
 
-    // ????(sample sequence 3??)
-   ADCSequenceConfigure(ADC0_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+    // ÅäÖÃ
+		ADCSequenceConfigure(ADC0_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+		ADCSequenceConfigure(ADC1_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
 	
-	
-	  //
-		ADCSequenceStepConfigure(ADC0_BASE,1,0,ADC_CTL_CH2);
-	  ADCSequenceStepConfigure(ADC0_BASE, 1, 1, ADC_CTL_CH1 | ADC_CTL_IE |
-                             ADC_CTL_END);
-	 // ADCSequenceStepConfigure(ADC0_BASE,3,1,ADC_CTL_CH1|ADC_CTL_END|ADC_CTL_IE);
+	  // ADC²ÉÑù
+		ADCSequenceStepConfigure(ADC0_BASE, 1, 0, ADC_CTL_CH2);
+	  ADCSequenceStepConfigure(ADC0_BASE, 1, 1, ADC_CTL_CH1 | ADC_CTL_IE | ADC_CTL_END);
+	  ADCSequenceStepConfigure(ADC1_BASE, 3, 0, ADC_CTL_CH0 | ADC_CTL_IE | ADC_CTL_END);
 
     //
     // Configure step 0 on sequence 3.  Sample channel 0 (ADC_CTL_CH0) in
@@ -457,9 +609,12 @@ void ADCInit(void)
 
     // Ê¹ÄÜµ¥´Î²ÉÑù·½Ê½(sample sequence 3)
     ADCSequenceEnable(ADC0_BASE, 1);
-
-    // ²ÉÑùÇ°Çå¿ÕÖÐ¶Ï±êÖ¾Î»
+		ADCSequenceEnable(ADC1_BASE, 3);
+    
+		// ²ÉÑùÇ°Çå¿ÕÖÐ¶Ï±êÖ¾Î»
     ADCIntClear(ADC0_BASE, 1);		
+		ADCIntClear(ADC1_BASE, 3);
+
 }
 
 //*****************************************************************************
@@ -479,11 +634,12 @@ void ADC_Sample(void)
     // uses sequence 3 which has a FIFO depth of 1.  If another sequence
     // was used with a deeper FIFO, then the array size must be changed.
     //
-    uint32_t pui32ADC0Value[2];
-	
+    // uint32_t pui32ADC0Value[2];
+		
     // ??ADC??
     ADCProcessorTrigger(ADC0_BASE, 1);
 
+	
     // µÈ´ý²ÉÑù×ª»»Íê³É
     while(!ADCIntStatus(ADC0_BASE, 1, false))
     {
@@ -491,10 +647,39 @@ void ADC_Sample(void)
 
     // Çå¿ÕADCÖÐ¶Ï±êÖ¾Î»
     ADCIntClear(ADC0_BASE, 1);
-
-    // ¶ÁÈ¡ADC²ÉÑùÖµ
+		
+    
+		// ¶ÁÈ¡ADC²ÉÑùÖµ
     ADCSequenceDataGet(ADC0_BASE, 1, ui32ADC0Value);
+		
+		
+    return ;
+}
+void ADC_Sample_1(void)
+{
 
+    //
+    // This array is used for storing the data read from the ADC FIFO. It
+    // must be as large as the FIFO for the sequencer in use.  This example
+    // uses sequence 3 which has a FIFO depth of 1.  If another sequence
+    // was used with a deeper FIFO, then the array size must be changed.
+    //
+    // uint32_t pui32ADC0Value[2];
+		
+    // ??ADC??
+ 		ADCProcessorTrigger(ADC1_BASE, 3);
+	
+    // µÈ´ý²ÉÑù×ª»»Íê³É
+    while(!ADCIntStatus(ADC1_BASE, 3, false) )
+    {
+    }
+
+    // Çå¿ÕADCÖÐ¶Ï±êÖ¾Î»
+		ADCIntClear(ADC1_BASE, 3);
+    
+		// ¶ÁÈ¡ADC²ÉÑùÖµ
+		ADCSequenceDataGet(ADC1_BASE, 3, ui32ADC1Value);
+		
     return ;
 }
 
@@ -519,6 +704,12 @@ void SysTick_Handler(void)       // ¶¨Ê±ÖÜÆÚÎª20ms
 	{
 		clock40ms_flag = 1;
 		clock40ms = 0;
+	}
+	
+	if (++clock400ms >= V_T400ms)
+	{
+		clock400ms_flag = 1;
+		clock400ms = 0;
 	}
 	
  	// 0.5ÃëÖÓÈí¶¨Ê±Æ÷¼ÆÊý
